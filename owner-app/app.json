@@ -1,0 +1,56 @@
+{
+  "expo": {
+    "name": "Womanhood",
+    "slug": "womanhood-owner",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "scheme": "womanhood",
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#FFF6EA"
+    },
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.womanhood.owner"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#FFF6EA"
+      },
+      "package": "com.womanhood.owner",
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.RECORD_AUDIO"
+      ]
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Allow Womanhood to access your camera to capture cloth photos."
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow Womanhood to access your photos to attach cloth images."
+        }
+      ],
+      "@react-native-community/datetimepicker"
+    ],
+    "extra": {
+      "router": {
+        "origin": false
+      },
+      "eas": {
+        "projectId": "13fcc9fc-2d4c-4d9b-81d1-eb72da9b6a01"
+      }
+    }
+  }
+}
