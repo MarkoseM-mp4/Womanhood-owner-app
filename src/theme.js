@@ -1,0 +1,126 @@
+import { StyleSheet } from 'react-native';
+
+export const COLORS = {
+  bg: '#FFF6EA',
+  white: '#FFFFFF',
+  primary: '#CDA595',
+  primaryDark: '#8C7268',
+  textMain: '#000000',
+  textSub: '#464644',
+  textMuted: '#9E9E9E',
+  inputBg: '#D9D9D9',
+  inputBorder: '#9E9E9E',
+  danger: '#E74C3C',
+};
+
+export const SHADOWS = {
+  card: {
+    shadowColor: '#CDA595',
+    shadowOffset: { width: 4, height: 4 },
+    shadowOpacity: 1,
+    shadowRadius: 0,
+    elevation: 4,
+  },
+  btn: {
+    shadowColor: '#000000',
+    shadowOffset: { width: 4, height: 4 },
+    shadowOpacity: 1,
+    shadowRadius: 0,
+    elevation: 6,
+  },
+};
+
+export const commonStyles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: COLORS.bg,
+  },
+  card: {
+    backgroundColor: COLORS.white,
+    borderRadius: 14,
+    ...SHADOWS.card,
+    padding: 16,
+  },
+  input: {
+    backgroundColor: COLORS.inputBg,
+    borderRadius: 11,
+    borderWidth: 1,
+    borderColor: COLORS.inputBorder,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    fontFamily: 'Inter_400Regular',
+    fontSize: 14,
+    color: COLORS.textMain,
+  },
+  label: {
+    fontFamily: 'Inter_400Regular',
+    fontSize: 11,
+    color: COLORS.textMain,
+    marginBottom: 6,
+    marginTop: 12,
+  },
+  backButton: {
+    width: 58,
+    height: 58,
+    borderRadius: 8,
+    backgroundColor: COLORS.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...SHADOWS.card,
+  },
+  saveButton: {
+    width: 165,
+    height: 62,
+    borderRadius: 9,
+    backgroundColor: COLORS.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    alignSelf: 'center',
+    marginTop: 24,
+    marginBottom: 40,
+    ...SHADOWS.btn,
+  },
+  saveButtonText: {
+    fontFamily: 'Inter_800ExtraBold',
+    fontSize: 24,
+    color: COLORS.white,
+  },
+  statusButton: {
+    width: 260,
+    height: 43,
+    borderRadius: 6,
+    backgroundColor: COLORS.primary,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    ...SHADOWS.btn,
+    marginBottom: 10,
+    alignSelf: 'center',
+  },
+  statusButtonActive: {
+    backgroundColor: COLORS.primaryDark,
+  },
+  statusButtonText: {
+    fontFamily: 'Inter_800ExtraBold',
+    fontSize: 12,
+    color: COLORS.white,
+  },
+  fab: {
+    position: 'absolute',
+    bottom: 30,
+    right: 24,
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: COLORS.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...SHADOWS.btn,
+  },
+  fabText: {
+    fontSize: 32,
+    color: COLORS.white,
+    marginTop: -2,
+  },
+});
