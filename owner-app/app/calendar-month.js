@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -7,10 +7,11 @@ import {
   ActivityIndicator,
   ScrollView,
   Dimensions,
+  PanResponder,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { searchOrders } from '../src/api';
+import { getMonthOrders } from '../src/api';
 import { COLORS, SHADOWS } from '../src/theme';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -63,27 +64,12 @@ export default function CalendarMonthScreen() {
   const [monthOrders, setMonthOrders] = useState({});
   const [loading, setLoading] = useState(true);
 
-  // Fetch ALL non-collected orders, group by local date for current month
+  // Fetch ALL non-collected orders grouped by local date for current month
   const fetchMonthOrders = useCallback(async (year, month) => {
     setLoading(true);
     try {
-      const res = await searchOrders('');
-      const all = res.data.orders || [];
-      const grouped = {};
-      for (const order of all) {
-        if (order.status === 'collected') continue;
-        const d = new Date(order.deliveryDueDate);
-        if (d.getFullYear() !== year || d.getMonth() + 1 !== month) continue;
-        const key = toLocalKey(d);
-        if (!grouped[key]) grouped[key] = [];
-        grouped[key].push({
-          _id: order._id,
-          customerName: order.customerName,
-          serialNumber: order.serialNumber,
-          status: order.status,
-        });
-      }
-      setMonthOrders(grouped);
+      const res = await getMonthOrders(year, month);
+      setMonthOrders(res.data.orders || {});
     } catch (err) {
       if (err.response?.status === 401) {
         await AsyncStorage.removeItem('token');
@@ -108,6 +94,25 @@ export default function CalendarMonthScreen() {
     setCurrentMonth((p) =>
       p.month === 12 ? { year: p.year + 1, month: 1 } : { ...p, month: p.month + 1 }
     );
+
+  const swipeX = useRef(0);
+  const THRESHOLD = 60;
+
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => false,
+      onMoveShouldSetPanResponder: (_, gs) => Math.abs(gs.dx) > 15 && Math.abs(gs.dx) > Math.abs(gs.dy),
+      onPanResponderGrant: (e) => { swipeX.current = e.nativeEvent.pageX; },
+      onPanResponderRelease: (e, gs) => {
+        const dx = gs.dx;
+        if (dx >= THRESHOLD) {
+          goToPrev();
+        } else if (dx <= -THRESHOLD) {
+          goToNext();
+        }
+      },
+    })
+  ).current;
 
   // Build calendar grid (Monday-first)
   const buildGrid = () => {
@@ -160,69 +165,71 @@ export default function CalendarMonthScreen() {
       </View>
 
       {/* ── Calendar grid ── */}
-      {loading ? (
-        <View style={styles.loader}>
-          <ActivityIndicator size="large" color={COLORS.primary} />
-        </View>
-      ) : (
-        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 30 }}>
-          {weeks.map((week, wi) => (
-            <View key={wi} style={styles.weekRow}>
-              {week.map((day, di) => {
-                const key = dayKey(day);
-                const orders = key ? (monthOrders[key] || []) : [];
-                const isToday = key === today;
-                const hasOrders = orders.length > 0;
+      <View style={{ flex: 1 }} {...panResponder.panHandlers}>
+        {loading ? (
+          <View style={styles.loader}>
+            <ActivityIndicator size="large" color={COLORS.primary} />
+          </View>
+        ) : (
+          <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 30 }}>
+            {weeks.map((week, wi) => (
+              <View key={wi} style={styles.weekRow}>
+                {week.map((day, di) => {
+                  const key = dayKey(day);
+                  const orders = key ? (monthOrders[key] || []) : [];
+                  const isToday = key === today;
+                  const hasOrders = orders.length > 0;
 
-                return (
-                  <TouchableOpacity
-                    key={di}
-                    style={[
-                      styles.cell,
-                      di === 6 && styles.cellSunday,
-                      isToday && styles.cellToday,
-                      hasOrders && styles.cellHasOrders,
-                    ]}
-                    onPress={() => day && router.replace(`/calendar?date=${key}`)}
-                    activeOpacity={day ? 0.75 : 1}
-                    disabled={!day}
-                  >
-                    {day ? (
-                      <>
-                        {/* Day number */}
-                        <View style={[styles.dayNumWrap, isToday && styles.dayNumWrapToday]}>
-                          <Text style={[styles.dayNum, isToday && styles.dayNumToday, di === 6 && styles.dayNumSun]}>
-                            {day}
-                          </Text>
-                        </View>
-
-                        {/* Order chips — show up to 3 */}
-                        {orders.slice(0, 3).map((order, oi) => (
-                          <View
-                            key={oi}
-                            style={[styles.chip, { backgroundColor: STATUS_COLORS[order.status] || COLORS.primary }]}
-                          >
-                            <Text style={styles.chipText} numberOfLines={1}>
-                              {order.customerName}
+                  return (
+                    <TouchableOpacity
+                      key={di}
+                      style={[
+                        styles.cell,
+                        di === 6 && styles.cellSunday,
+                        isToday && styles.cellToday,
+                        hasOrders && styles.cellHasOrders,
+                      ]}
+                      onPress={() => day && router.replace(`/calendar?date=${key}`)}
+                      activeOpacity={day ? 0.75 : 1}
+                      disabled={!day}
+                    >
+                      {day ? (
+                        <>
+                          {/* Day number */}
+                          <View style={[styles.dayNumWrap, isToday && styles.dayNumWrapToday]}>
+                            <Text style={[styles.dayNum, isToday && styles.dayNumToday, di === 6 && styles.dayNumSun]}>
+                              {day}
                             </Text>
                           </View>
-                        ))}
 
-                        {/* Overflow badge */}
-                        {orders.length > 3 && (
-                          <View style={styles.moreBadge}>
-                            <Text style={styles.moreText}>+{orders.length - 3} more</Text>
-                          </View>
-                        )}
-                      </>
-                    ) : null}
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-          ))}
-        </ScrollView>
-      )}
+                          {/* Order chips — show up to 3 */}
+                          {orders.slice(0, 3).map((order, oi) => (
+                            <View
+                              key={oi}
+                              style={[styles.chip, { backgroundColor: STATUS_COLORS[order.status] || COLORS.primary }]}
+                            >
+                              <Text style={styles.chipText} numberOfLines={1}>
+                                {order.customerName}
+                              </Text>
+                            </View>
+                          ))}
+
+                          {/* Overflow badge */}
+                          {orders.length > 3 && (
+                            <View style={styles.moreBadge}>
+                              <Text style={styles.moreText}>+{orders.length - 3} more</Text>
+                            </View>
+                          )}
+                        </>
+                      ) : null}
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            ))}
+          </ScrollView>
+        )}
+      </View>
 
       {/* ── Legend ── */}
       <View style={styles.legend}>
