@@ -357,7 +357,8 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.white,
     borderTopWidth: 1,
     borderTopColor: '#f0ebe6',
-    height: 72,
+    height: 85,
+    paddingBottom: 20,
     ...SHADOWS.card,
   },
   navbarTab: {
