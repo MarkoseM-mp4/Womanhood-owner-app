@@ -67,13 +67,15 @@ export default function CalendarDayScreen() {
 
   const panResponder = useRef(
     PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder: (_, gs) => Math.abs(gs.dx) > 10,
+      onStartShouldSetPanResponder: () => false,
+      onMoveShouldSetPanResponder: (_, gs) => Math.abs(gs.dx) > 15 && Math.abs(gs.dx) > Math.abs(gs.dy),
       onPanResponderGrant: (e) => { swipeX.current = e.nativeEvent.pageX; },
-      onPanResponderRelease: (e) => {
-        const dx = e.nativeEvent.pageX - swipeX.current;
-        if (Math.abs(dx) >= THRESHOLD) {
-          setSelectedDate((prev) => stepDay(prev, dx > 0 ? -1 : 1));
+      onPanResponderRelease: (e, gs) => {
+        const dx = gs.dx;
+        if (dx >= THRESHOLD) {
+          setSelectedDate((prev) => stepDay(prev, -1));
+        } else if (dx <= -THRESHOLD) {
+          setSelectedDate((prev) => stepDay(prev, 1));
         }
       },
     })
@@ -279,7 +281,7 @@ const styles = StyleSheet.create({
   emptyText: { fontFamily: 'Inter_400Regular', fontSize: 13, color: COLORS.textMuted, textAlign: 'center' },
   navbar: {
     flexDirection: 'row', backgroundColor: COLORS.white,
-    borderTopWidth: 1, borderTopColor: '#f0ebe6', height: 72, ...SHADOWS.card,
+    borderTopWidth: 1, borderTopColor: '#f0ebe6', height: 85, paddingBottom: 20, ...SHADOWS.card,
   },
   navbarTab: {
     flex: 1, alignItems: 'center', justifyContent: 'center',
