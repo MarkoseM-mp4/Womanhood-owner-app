@@ -4,7 +4,7 @@
     "slug": "womanhood-owner",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/icon.jpeg",
+    "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "scheme": "womanhood",
     "splash": {
@@ -51,6 +51,9 @@
       "eas": {
         "projectId": "13fcc9fc-2d4c-4d9b-81d1-eb72da9b6a01"
       }
+    },
+    "web": {
+      "favicon": "./assets/favicon.jpeg"
     }
   }
 }

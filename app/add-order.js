@@ -13,13 +13,14 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
-import { manipulateAsync, SaveFormat } from 'expo-image-manipulator';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import DateTimePicker from '@react-native-community/datetimepicker';
-import { createOrder } from '../src/api';
+import { createOrder, updateOrderWithImage } from '../src/api';
 import { COLORS, SHADOWS } from '../src/theme';
 
 export default function AddOrderScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const [image, setImage] = useState(null);
   const [name, setName] = useState('');
   const [serialNo, setSerialNo] = useState('');
@@ -41,18 +42,11 @@ export default function AddOrderScreen() {
           }
           const result = await ImagePicker.launchCameraAsync({
             mediaTypes: ['images'],
-            allowsEditing: true,
-            quality: 0.8,
+            allowsEditing: false,
+            quality: 0.3,
           });
           if (!result.canceled) {
-            const asset = result.assets[0];
-            const actions = asset.width > 1000 ? [{ resize: { width: 1000 } }] : [];
-            const manipResult = await manipulateAsync(
-              asset.uri,
-              actions,
-              { compress: 0.7, format: SaveFormat.JPEG }
-            );
-            setImage(manipResult);
+            setImage(result.assets[0]);
           }
         },
       },
@@ -66,18 +60,11 @@ export default function AddOrderScreen() {
           }
           const result = await ImagePicker.launchImageLibraryAsync({
             mediaTypes: ['images'],
-            allowsEditing: true,
-            quality: 0.8,
+            allowsEditing: false,
+            quality: 0.3,
           });
           if (!result.canceled) {
-            const asset = result.assets[0];
-            const actions = asset.width > 1000 ? [{ resize: { width: 1000 } }] : [];
-            const manipResult = await manipulateAsync(
-              asset.uri,
-              actions,
-              { compress: 0.7, format: SaveFormat.JPEG }
-            );
-            setImage(manipResult);
+            setImage(result.assets[0]);
           }
         },
       },
@@ -87,7 +74,16 @@ export default function AddOrderScreen() {
 
   const handleSave = async () => {
     if (!name.trim() || !serialNo.trim() || !phoneNo.trim()) {
-      Alert.alert('Error', 'Please fill in Name, Serial No, and Phone No.');
+      Alert.alert('Missing Fields', 'Please fill in the Name, Serial No, and Phone Number.');
+      return;
+    }
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const dDate = new Date(dueDate);
+    dDate.setHours(0, 0, 0, 0);
+    if (dDate < today) {
+      Alert.alert('Invalid Date', 'Delivery due date cannot be before the received date.');
       return;
     }
 
@@ -100,23 +96,35 @@ export default function AddOrderScreen() {
       formData.append('deliveryDueDate', dueDate.toISOString());
       formData.append('notes', notes.trim());
 
+      // 1. Instantly create the core order data (lightning fast)
+      const res = await createOrder(formData);
+      const newOrderId = res.data.order._id;
+
+      // 2. Optimistically return to the Home screen for an instant UX feel
+      router.back();
+
+      // 3. Asynchronously upload the image in the background if selected
       if (image) {
         const ext = image.uri.split('.').pop() || 'jpg';
-        formData.append('clothPhoto', {
+        const photoData = new FormData();
+        photoData.append('clothPhoto', {
           uri: image.uri,
           type: `image/${ext}`,
           name: `cloth_${Date.now()}.${ext}`,
         });
+
+        // Fire and forget: this continues in the background
+        updateOrderWithImage(newOrderId, photoData).catch((err) => {
+          console.error('Background image upload failed:', err);
+          // Optional: we could alert the user here if we really wanted to, 
+          // but silent failure is usually better for background tasks
+        });
       }
 
-      await createOrder(formData);
-      Alert.alert('Success', 'Order created successfully!');
-      router.back();
     } catch (err) {
-      const msg = err.response?.data?.message || 'Failed to create order';
-      Alert.alert('Error', msg);
-    } finally {
       setSaving(false);
+      const msg = err.response?.data?.message || 'Failed to create order. Please try again.';
+      Alert.alert('Error', msg);
     }
   };
 
@@ -132,74 +140,85 @@ export default function AddOrderScreen() {
       style={styles.container}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
-      <ScrollView showsVerticalScrollIndicator={false}>
-        {/* Header */}
-        <View style={styles.header}>
-          <TouchableOpacity
-            style={styles.backButton}
-            onPress={() => router.back()}
-            activeOpacity={0.8}
-          >
-            <Text style={styles.backArrow}>←</Text>
-          </TouchableOpacity>
-          <Text style={styles.headerTitle}>New Order</Text>
-        </View>
+      <View style={styles.header}>
+        <TouchableOpacity
+          style={styles.backButton}
+          onPress={() => router.back()}
+          activeOpacity={0.8}
+        >
+          <Text style={styles.backArrow}>‹</Text>
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>New Order</Text>
+        <View style={styles.headerSpacer} />
+      </View>
 
-        {/* Card form */}
-        <View style={styles.formCard}>
-          {/* Photo area */}
-          <TouchableOpacity style={styles.photoArea} onPress={pickImage} activeOpacity={0.8}>
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
+        
+        <View style={styles.section}>
+          <TouchableOpacity style={styles.photoArea} onPress={pickImage} activeOpacity={0.85}>
             {image ? (
-              <Image source={{ uri: image.uri }} style={styles.photoPreview} />
+              <View style={styles.photoPreviewContainer}>
+                <Image source={{ uri: image.uri }} style={styles.photoPreview} />
+                <View style={styles.photoOverlay}>
+                  <Text style={styles.photoOverlayText}>Tap to change photo</Text>
+                </View>
+              </View>
             ) : (
               <View style={styles.photoPlaceholder}>
-                <Text style={{ fontSize: 40 }}>📷</Text>
-                <Text style={styles.photoText}>Tap to add photo</Text>
+                <Text style={styles.photoIcon}>📷</Text>
+                <Text style={styles.photoText}>Upload Reference Photo</Text>
+                <Text style={styles.photoSubText}>JPEG, PNG up to 10MB</Text>
               </View>
             )}
           </TouchableOpacity>
+        </View>
 
-          {/* Fields */}
-          <Text style={styles.label}>Name:</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="Customer name"
-            placeholderTextColor={COLORS.textMuted}
-            value={name}
-            onChangeText={setName}
-          />
-
-          <Text style={styles.label}>Serial No:</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="Unique serial number"
-            placeholderTextColor={COLORS.textMuted}
-            value={serialNo}
-            onChangeText={setSerialNo}
-          />
-
-          <Text style={styles.label}>Phone No:</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="Phone number"
-            placeholderTextColor={COLORS.textMuted}
-            value={phoneNo}
-            onChangeText={setPhoneNo}
-            keyboardType="phone-pad"
-          />
-
-          <Text style={styles.label}>Date Given:</Text>
-          <View style={[styles.input, styles.readOnlyField]}>
-            <Text style={styles.readOnlyText}>{formatDate(new Date())}</Text>
+        <View style={styles.formCard}>
+          <View style={styles.inputGroup}>
+            <Text style={styles.label}>Full Name</Text>
+            <TextInput
+              style={styles.input}
+              value={name}
+              onChangeText={setName}
+            />
           </View>
 
-          <Text style={styles.label}>Due Date:</Text>
-          <TouchableOpacity
-            style={styles.input}
-            onPress={() => setShowDatePicker(true)}
-          >
-            <Text style={styles.readOnlyText}>{formatDate(dueDate)}</Text>
-          </TouchableOpacity>
+          <View style={styles.inputGroup}>
+            <Text style={styles.label}>Serial Number</Text>
+            <TextInput
+              style={styles.input}
+              value={serialNo}
+              onChangeText={setSerialNo}
+            />
+          </View>
+
+          <View style={styles.inputGroup}>
+            <Text style={styles.label}>Phone Number</Text>
+            <TextInput
+              style={styles.input}
+              value={phoneNo}
+              onChangeText={setPhoneNo}
+              keyboardType="phone-pad"
+            />
+          </View>
+
+          <View style={styles.inputGroup}>
+            <Text style={styles.label}>Date Received</Text>
+            <View style={[styles.input, styles.datePickerBtn]}>
+              <Text style={styles.datePickerText}>{formatDate(new Date())}</Text>
+            </View>
+          </View>
+
+          <View style={styles.inputGroup}>
+            <Text style={styles.label}>Due Date</Text>
+            <TouchableOpacity
+              style={[styles.input, styles.datePickerBtn]}
+              onPress={() => setShowDatePicker(true)}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.datePickerText}>{formatDate(dueDate)}</Text>
+            </TouchableOpacity>
+          </View>
 
           {showDatePicker && (
             <DateTimePicker
@@ -214,31 +233,36 @@ export default function AddOrderScreen() {
             />
           )}
 
-          <Text style={styles.label}>Notes:</Text>
-          <TextInput
-            style={[styles.input, styles.notesInput]}
-            placeholder="Optional notes"
-            placeholderTextColor={COLORS.textMuted}
-            value={notes}
-            onChangeText={setNotes}
-            multiline
-            numberOfLines={3}
-            textAlignVertical="top"
-          />
+          <View style={styles.inputGroup}>
+            <Text style={styles.label}>Additional Notes</Text>
+            <TextInput
+              style={[styles.input, styles.notesInput]}
+              value={notes}
+              onChangeText={setNotes}
+              multiline
+              numberOfLines={4}
+              textAlignVertical="top"
+            />
+          </View>
 
-          {/* Save button */}
-          <TouchableOpacity
-            style={[styles.saveButton, saving && { opacity: 0.7 }]}
-            onPress={handleSave}
-            disabled={saving}
-            activeOpacity={0.8}
-          >
-            <Text style={styles.saveButtonText}>
-              {saving ? 'SAVING...' : 'SAVE'}
-            </Text>
-          </TouchableOpacity>
         </View>
+
       </ScrollView>
+
+      <View style={[styles.fixedBottom, { paddingBottom: Math.max(insets.bottom, 20) }]}>
+        <TouchableOpacity
+          style={[styles.saveButton, saving && styles.saveButtonDisabled]}
+          onPress={handleSave}
+          disabled={saving}
+          activeOpacity={0.8}
+        >
+          {saving ? (
+            <Text style={styles.saveButtonText}>Saving Order...</Text>
+          ) : (
+            <Text style={styles.saveButtonText}>Create Order</Text>
+          )}
+        </TouchableOpacity>
+      </View>
     </KeyboardAvoidingView>
   );
 }
@@ -251,108 +275,163 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
     paddingHorizontal: 20,
     paddingTop: 56,
     paddingBottom: 16,
-    gap: 16,
   },
   backButton: {
-    width: 58,
-    height: 58,
-    borderRadius: 8,
-    backgroundColor: COLORS.primary,
+    width: 48,
+    height: 48,
+    borderRadius: 12,
+    backgroundColor: COLORS.white,
     alignItems: 'center',
     justifyContent: 'center',
     ...SHADOWS.card,
   },
   backArrow: {
-    fontSize: 24,
-    color: COLORS.white,
-    fontWeight: '800',
+    fontSize: 28,
+    color: COLORS.primaryDark,
+    fontWeight: '600',
+    marginTop: -4,
   },
   headerTitle: {
     fontFamily: 'Inter_800ExtraBold',
-    fontSize: 22,
+    fontSize: 18,
     color: COLORS.textMain,
+  },
+  headerSpacer: {
+    width: 48,
+  },
+  scrollContent: {
+    paddingHorizontal: 20,
+    paddingBottom: 40,
+    paddingTop: 8,
+  },
+  section: {
+    marginBottom: 24,
   },
   formCard: {
     backgroundColor: COLORS.white,
-    borderRadius: 14,
-    ...SHADOWS.card,
-    marginHorizontal: 20,
+    borderRadius: 16,
     padding: 20,
-    marginBottom: 40,
+    ...SHADOWS.card,
   },
   photoArea: {
     width: '100%',
-    height: 314,
+    height: 220,
     borderRadius: 16,
+    backgroundColor: COLORS.white,
     overflow: 'hidden',
-    marginBottom: 8,
+    ...SHADOWS.card,
+  },
+  photoPreviewContainer: {
+    width: '100%',
+    height: '100%',
   },
   photoPreview: {
     width: '100%',
     height: '100%',
-    borderRadius: 16,
+  },
+  photoOverlay: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  photoOverlayText: {
+    fontFamily: 'Inter_400Regular',
+    color: COLORS.white,
+    fontSize: 13,
+    fontWeight: '600',
   },
   photoPlaceholder: {
-    width: '100%',
-    height: '100%',
-    backgroundColor: COLORS.inputBg,
-    borderRadius: 16,
+    flex: 1,
+    backgroundColor: '#F3E8E0',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
+    borderWidth: 1.5,
+    borderColor: '#E6D5C9',
+    borderStyle: 'dashed',
+    borderRadius: 16,
+  },
+  photoIcon: {
+    fontSize: 36,
+    marginBottom: 8,
   },
   photoText: {
+    fontFamily: 'Inter_800ExtraBold',
+    fontSize: 15,
+    color: COLORS.primaryDark,
+    marginBottom: 4,
+  },
+  photoSubText: {
     fontFamily: 'Inter_400Regular',
-    fontSize: 13,
-    color: COLORS.textMuted,
+    fontSize: 12,
+    color: COLORS.textSub,
+  },
+  inputGroup: {
+    marginBottom: 20,
   },
   label: {
-    fontFamily: 'Inter_400Regular',
+    fontFamily: 'Inter_800ExtraBold',
     fontSize: 11,
-    color: COLORS.textMain,
-    marginBottom: 6,
-    marginTop: 14,
+    color: COLORS.textSub,
+    marginBottom: 8,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
   input: {
-    backgroundColor: COLORS.inputBg,
-    borderRadius: 11,
-    borderWidth: 1,
-    borderColor: COLORS.inputBorder,
-    paddingHorizontal: 14,
-    paddingVertical: 11,
+    backgroundColor: COLORS.white,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: COLORS.primary,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
     fontFamily: 'Inter_400Regular',
-    fontSize: 14,
-    color: COLORS.textMain,
+    fontSize: 15,
+    color: COLORS.primaryDark,
+    fontWeight: '600',
   },
-  readOnlyField: {
-    backgroundColor: '#EEEEEE',
+  fixedBottom: {
+    paddingHorizontal: 20,
+    paddingTop: 16,
+    backgroundColor: COLORS.bg,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(0,0,0,0.05)',
   },
-  readOnlyText: {
+  datePickerBtn: {
+    justifyContent: 'center',
+  },
+  datePickerText: {
     fontFamily: 'Inter_400Regular',
-    fontSize: 14,
-    color: COLORS.textMain,
+    fontSize: 15,
+    color: COLORS.primaryDark,
+    fontWeight: '600',
   },
   notesInput: {
-    minHeight: 80,
-    paddingTop: 12,
+    height: 100,
+    paddingTop: 14,
   },
   saveButton: {
-    width: 165,
-    height: 62,
-    borderRadius: 9,
+    width: '100%',
+    height: 56,
+    borderRadius: 14,
     backgroundColor: COLORS.primary,
     alignItems: 'center',
     justifyContent: 'center',
-    alignSelf: 'center',
-    marginTop: 28,
     ...SHADOWS.btn,
+  },
+  saveButtonDisabled: {
+    opacity: 0.7,
   },
   saveButtonText: {
     fontFamily: 'Inter_800ExtraBold',
-    fontSize: 24,
+    fontSize: 16,
     color: COLORS.white,
+    letterSpacing: 0.5,
   },
 });

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, memo } from 'react';
 import {
   View,
   Text,
@@ -9,8 +9,11 @@ import {
   StyleSheet,
   RefreshControl,
   ActivityIndicator,
+  PanResponder,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRef } from 'react';
+import { useRouter, useFocusEffect } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { searchOrders } from '../src/api';
@@ -24,8 +27,55 @@ const STATUS_MAP = {
   collected: { label: 'Collected', icon: '✅' },
 };
 
+const formatDate = (dateStr) => {
+  if (!dateStr) return '';
+  return new Date(dateStr).toLocaleDateString('en-IN', {
+    day: '2-digit',
+    month: 'short',
+  });
+};
+
+const OrderCard = memo(({ item, onPress }) => (
+  <TouchableOpacity
+    style={styles.orderCard}
+    onPress={onPress}
+    activeOpacity={0.85}
+  >
+    {item.clothPhoto ? (
+      <Image source={{ uri: item.clothPhoto }} style={styles.orderImage} />
+    ) : (
+      <View style={styles.orderImagePlaceholder}>
+        <Text style={{ fontSize: 32 }}>👗</Text>
+      </View>
+    )}
+    <View style={styles.orderInfo}>
+      <Text style={styles.orderName} numberOfLines={1}>
+        {item.customerName}
+      </Text>
+      <Text style={styles.orderSerial}>Serial: {item.serialNumber}</Text>
+      <Text style={styles.orderPhone}>📱 {item.phoneNumber}</Text>
+      <Text style={styles.orderDate}>
+        Due: {formatDate(item.deliveryDueDate)}
+      </Text>
+      {item.status && (
+        <View
+          style={[
+            styles.statusBadge,
+            item.status === 'collected' && styles.statusBadgeCollected,
+          ]}
+        >
+          <Text style={styles.statusBadgeText}>
+            {STATUS_MAP[item.status]?.icon} {STATUS_MAP[item.status]?.label}
+          </Text>
+        </View>
+      )}
+    </View>
+  </TouchableOpacity>
+));
+
 export default function HomeScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const [query, setQuery] = useState('');
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -58,9 +108,11 @@ export default function HomeScreen() {
     }
   };
 
-  useEffect(() => {
-    fetchOrders('', 1);
-  }, []);
+  useFocusEffect(
+    useCallback(() => {
+      fetchOrders('', 1);
+    }, [])
+  );
 
   // Debounced search
   useEffect(() => {
@@ -83,51 +135,23 @@ export default function HomeScreen() {
     }
   };
 
-  const formatDate = (dateStr) => {
-    if (!dateStr) return '';
-    return new Date(dateStr).toLocaleDateString('en-IN', {
-      day: '2-digit',
-      month: 'short',
-    });
-  };
+  const swipeX = useRef(0);
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => false,
+      onMoveShouldSetPanResponder: (_, gs) => Math.abs(gs.dx) > 20 && Math.abs(gs.dx) > Math.abs(gs.dy),
+      onPanResponderGrant: (e) => { swipeX.current = e.nativeEvent.pageX; },
+      onPanResponderRelease: (e, gs) => {
+        if (gs.dx <= -60) {
+          router.replace('/calendar');
+        }
+      },
+    })
+  ).current;
 
-  const renderOrderCard = ({ item }) => (
-    <TouchableOpacity
-      style={styles.orderCard}
-      onPress={() => router.push(`/order/${item._id}`)}
-      activeOpacity={0.85}
-    >
-      {item.clothPhoto ? (
-        <Image source={{ uri: item.clothPhoto }} style={styles.orderImage} />
-      ) : (
-        <View style={styles.orderImagePlaceholder}>
-          <Text style={{ fontSize: 32 }}>👗</Text>
-        </View>
-      )}
-      <View style={styles.orderInfo}>
-        <Text style={styles.orderName} numberOfLines={1}>
-          {item.customerName}
-        </Text>
-        <Text style={styles.orderSerial}>Serial: {item.serialNumber}</Text>
-        <Text style={styles.orderPhone}>📱 {item.phoneNumber}</Text>
-        <Text style={styles.orderDate}>
-          Due: {formatDate(item.deliveryDueDate)}
-        </Text>
-        {item.status && (
-          <View
-            style={[
-              styles.statusBadge,
-              item.status === 'collected' && styles.statusBadgeCollected,
-            ]}
-          >
-            <Text style={styles.statusBadgeText}>
-              {STATUS_MAP[item.status]?.icon} {STATUS_MAP[item.status]?.label}
-            </Text>
-          </View>
-        )}
-      </View>
-    </TouchableOpacity>
-  );
+  const renderOrderCard = useCallback(({ item }) => (
+    <OrderCard item={item} onPress={() => router.push(`/order/${item._id}`)} />
+  ), [router]);
 
   const renderEmpty = () => {
     if (loading) return null;
@@ -149,7 +173,7 @@ export default function HomeScreen() {
   };
 
   return (
-    <View style={styles.container}>
+    <View style={styles.container} {...panResponder.panHandlers}>
       {/* Gradient header */}
       <LinearGradient
         colors={['rgba(0,0,0,0.35)', 'rgba(0,0,0,0.1)', 'transparent']}
@@ -198,7 +222,7 @@ export default function HomeScreen() {
 
       {/* FAB */}
       <TouchableOpacity
-        style={styles.fab}
+        style={[styles.fab, { bottom: 84 + Math.max(insets.bottom, 20) }]}
         onPress={() => router.push('/add-order')}
         activeOpacity={0.8}
       >
@@ -206,7 +230,7 @@ export default function HomeScreen() {
       </TouchableOpacity>
 
       {/* Bottom Navbar */}
-      <View style={styles.navbar}>
+      <View style={[styles.navbar, { paddingBottom: Math.max(insets.bottom, 20), height: 65 + Math.max(insets.bottom, 20) }]}>
         <TouchableOpacity
           style={styles.navbarTab}
           activeOpacity={0.75}
@@ -219,7 +243,7 @@ export default function HomeScreen() {
 
         <TouchableOpacity
           style={styles.navbarTab}
-          onPress={() => router.push('/calendar')}
+          onPress={() => router.replace('/calendar')}
           activeOpacity={0.75}
           accessibilityLabel="Go to Calendar"
         >
@@ -359,7 +383,6 @@ const styles = StyleSheet.create({
   },
   fab: {
     position: 'absolute',
-    bottom: 86,
     right: 24,
     width: 60,
     height: 60,
@@ -370,10 +393,11 @@ const styles = StyleSheet.create({
     ...SHADOWS.btn,
   },
   fabText: {
-    fontSize: 32,
+    fontSize: 34,
     color: COLORS.white,
     fontWeight: '800',
-    marginTop: -2,
+    marginTop: -4,
+    marginLeft: 2,
   },
   // Bottom Navbar
   navbar: {
@@ -381,8 +405,6 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.white,
     borderTopWidth: 1,
     borderTopColor: '#f0ebe6',
-    height: 85,
-    paddingBottom: 20,
     ...SHADOWS.card,
   },
   navbarTab: {

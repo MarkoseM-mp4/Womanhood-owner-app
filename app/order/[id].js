@@ -9,7 +9,9 @@ import {
   ScrollView,
   Alert,
   ActivityIndicator,
+  Platform,
 } from 'react-native';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { getOrder, updateOrder, updateOrderStatus, deleteOrder } from '../../src/api';
 import { COLORS, SHADOWS } from '../../src/theme';
@@ -31,6 +33,7 @@ export default function OrderDetailScreen() {
   const [editData, setEditData] = useState({});
   const [savingEdit, setSavingEdit] = useState(false);
   const [updatingStatus, setUpdatingStatus] = useState(false);
+  const [showDatePicker, setShowDatePicker] = useState(false);
 
   useEffect(() => {
     fetchOrder();
@@ -44,6 +47,7 @@ export default function OrderDetailScreen() {
         customerName: res.data.order.customerName,
         phoneNumber: res.data.order.phoneNumber,
         notes: res.data.order.notes || '',
+        deliveryDueDate: new Date(res.data.order.deliveryDueDate),
       });
     } catch (err) {
       Alert.alert('Error', 'Failed to load order');
@@ -63,9 +67,23 @@ export default function OrderDetailScreen() {
   };
 
   const handleSaveEdit = async () => {
+    // Validation
+    const gDate = new Date(order.dateGiven || order.createdAt);
+    const dDate = new Date(editData.deliveryDueDate);
+    gDate.setHours(0, 0, 0, 0);
+    dDate.setHours(0, 0, 0, 0);
+    if (dDate < gDate) {
+      Alert.alert('Invalid Date', 'Delivery due date cannot be before the received date.');
+      return;
+    }
+
     setSavingEdit(true);
     try {
-      const res = await updateOrder(id, editData);
+      const payload = {
+        ...editData,
+        deliveryDueDate: editData.deliveryDueDate.toISOString()
+      };
+      const res = await updateOrder(id, payload);
       setOrder(res.data.order);
       setEditing(false);
       Alert.alert('Success', 'Order updated');
@@ -195,6 +213,29 @@ export default function OrderDetailScreen() {
                 onChangeText={(t) => setEditData({ ...editData, phoneNumber: t })}
                 keyboardType="phone-pad"
               />
+              <Text style={styles.editLabel}>Due Date:</Text>
+              <TouchableOpacity
+                style={[styles.editInput, { justifyContent: 'center' }]}
+                onPress={() => setShowDatePicker(true)}
+              >
+                <Text style={{ fontFamily: 'Inter_400Regular', fontSize: 14, color: COLORS.primaryDark, fontWeight: '600' }}>
+                  {formatDate(editData.deliveryDueDate)}
+                </Text>
+              </TouchableOpacity>
+              
+              {showDatePicker && (
+                <DateTimePicker
+                  value={editData.deliveryDueDate}
+                  mode="date"
+                  display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                  minimumDate={new Date(order.dateGiven || order.createdAt)}
+                  onChange={(event, date) => {
+                    setShowDatePicker(Platform.OS === 'ios');
+                    if (date) setEditData({ ...editData, deliveryDueDate: date });
+                  }}
+                />
+              )}
+
               <Text style={styles.editLabel}>Notes:</Text>
               <TextInput
                 style={[styles.editInput, { minHeight: 60 }]}
@@ -212,6 +253,7 @@ export default function OrderDetailScreen() {
                       customerName: order.customerName,
                       phoneNumber: order.phoneNumber,
                       notes: order.notes || '',
+                      deliveryDueDate: new Date(order.deliveryDueDate),
                     });
                   }}
                 >
@@ -425,22 +467,25 @@ const styles = StyleSheet.create({
   },
   // Edit mode
   editLabel: {
-    fontFamily: 'Inter_400Regular',
+    fontFamily: 'Inter_800ExtraBold',
     fontSize: 11,
-    color: COLORS.textMain,
-    marginBottom: 6,
+    color: COLORS.textSub,
+    marginBottom: 8,
     marginTop: 12,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
   editInput: {
-    backgroundColor: COLORS.inputBg,
-    borderRadius: 11,
-    borderWidth: 1,
-    borderColor: COLORS.inputBorder,
+    backgroundColor: COLORS.white,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: COLORS.primary,
     paddingHorizontal: 14,
     paddingVertical: 11,
     fontFamily: 'Inter_400Regular',
     fontSize: 14,
-    color: COLORS.textMain,
+    color: COLORS.primaryDark,
+    fontWeight: '600',
   },
   editActions: {
     flexDirection: 'row',
