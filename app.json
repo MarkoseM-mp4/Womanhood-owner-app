@@ -8,7 +8,7 @@
     "userInterfaceStyle": "light",
     "scheme": "womanhood",
     "splash": {
-      "image": "./assets/splash-icon.jpeg",
+      "image": "./assets/icon.png",
       "resizeMode": "contain",
       "backgroundColor": "#FFF6EA"
     },
@@ -18,7 +18,7 @@
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon.jpeg",
+        "foregroundImage": "./assets/icon.png",
         "backgroundColor": "#FFF6EA"
       },
       "package": "com.womanhood.owner",
@@ -49,11 +49,11 @@
         "origin": false
       },
       "eas": {
-        "projectId": "13fcc9fc-2d4c-4d9b-81d1-eb72da9b6a01"
+        "projectId": "bf664ac7-6557-40c8-ac06-1fc5f39b14b8"
       }
     },
     "web": {
-      "favicon": "./assets/favicon.jpeg"
+      "favicon": "./assets/icon.png"
     }
   }
 }
