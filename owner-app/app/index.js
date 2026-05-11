@@ -31,7 +31,7 @@ export default function LoginScreen() {
     if (!checkingAuth) {
       Animated.timing(fadeAnim, {
         toValue: 1,
-        duration: 800,
+        duration: 300,
         useNativeDriver: true,
       }).start();
     }
@@ -163,21 +163,24 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   label: {
-    fontFamily: 'Inter_400Regular',
+    fontFamily: 'Inter_800ExtraBold',
     fontSize: 11,
-    color: COLORS.textMain,
-    marginBottom: 6,
+    color: COLORS.textSub,
+    marginBottom: 8,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
   input: {
-    backgroundColor: COLORS.inputBg,
-    borderRadius: 11,
-    borderWidth: 1,
-    borderColor: COLORS.inputBorder,
+    backgroundColor: COLORS.white,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: COLORS.primary,
     paddingHorizontal: 14,
     paddingVertical: 12,
     fontFamily: 'Inter_400Regular',
     fontSize: 14,
-    color: COLORS.textMain,
+    color: COLORS.primaryDark,
+    fontWeight: '600',
   },
   loginButton: {
     backgroundColor: COLORS.primary,

@@ -25,17 +25,17 @@ const MONTH_NAMES = [
 ];
 
 const STATUS_COLORS = {
-  material_collected:    '#CDA595',
-  cutting:               '#E8976A',
+  material_collected: '#CDA595',
+  cutting: '#E8976A',
   stitching_in_progress: '#7EB8D4',
-  ready_to_collect:      '#6DBF8A',
+  ready_to_collect: '#6DBF8A',
 };
 
 const STATUS_LABELS = {
-  material_collected:    'Mat.',
-  cutting:               'Cut',
+  material_collected: 'Mat.',
+  cutting: 'Cut',
   stitching_in_progress: 'Stitch',
-  ready_to_collect:      'Ready',
+  ready_to_collect: 'Ready',
 };
 
 /** Convert any date value → local 'YYYY-MM-DD' */
@@ -66,16 +66,15 @@ export default function CalendarMonthScreen() {
 
   // Fetch ALL non-collected orders grouped by local date for current month
   const fetchMonthOrders = useCallback(async (year, month) => {
-    setLoading(true);
     try {
       const res = await getMonthOrders(year, month);
-      setMonthOrders(res.data.orders || {});
+      // Cache the result with previous ones to avoid refetching flickers completely
+      setMonthOrders((prev) => ({ ...prev, ...res.data.orders }));
     } catch (err) {
       if (err.response?.status === 401) {
         await AsyncStorage.removeItem('token');
         router.replace('/');
       }
-      setMonthOrders({});
     } finally {
       setLoading(false);
     }
@@ -227,18 +226,18 @@ export default function CalendarMonthScreen() {
                 })}
               </View>
             ))}
+
+            {/* ── Legend moved to month end ── */}
+            <View style={styles.legend}>
+              {Object.entries(STATUS_COLORS).map(([status, color]) => (
+                <View key={status} style={styles.legendItem}>
+                  <View style={[styles.legendDot, { backgroundColor: color }]} />
+                  <Text style={styles.legendLabel}>{STATUS_LABELS[status]}</Text>
+                </View>
+              ))}
+            </View>
           </ScrollView>
         )}
-      </View>
-
-      {/* ── Legend ── */}
-      <View style={styles.legend}>
-        {Object.entries(STATUS_COLORS).map(([status, color]) => (
-          <View key={status} style={styles.legendItem}>
-            <View style={[styles.legendDot, { backgroundColor: color }]} />
-            <Text style={styles.legendLabel}>{STATUS_LABELS[status]}</Text>
-          </View>
-        ))}
       </View>
     </View>
   );
@@ -343,9 +342,10 @@ const styles = StyleSheet.create({
   // Legend
   legend: {
     flexDirection: 'row', flexWrap: 'wrap', gap: 10,
-    paddingHorizontal: 16, paddingVertical: 10,
-    backgroundColor: COLORS.white,
-    borderTopWidth: 1, borderTopColor: '#e2d8d0',
+    paddingHorizontal: 16, paddingVertical: 14,
+    backgroundColor: 'transparent',
+    alignItems: 'center', justifyContent: 'center',
+    marginTop: 8,
   },
   legendItem: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   legendDot: { width: 8, height: 8, borderRadius: 4 },

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, memo } from 'react';
 import {
   View,
   Text,
@@ -10,6 +10,7 @@ import {
   Image,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getOrdersByDate } from '../src/api';
 import { COLORS, SHADOWS } from '../src/theme';
@@ -41,16 +42,49 @@ const formatDayDisplay = (key) => {
 
 const STATUS_MAP = {
   material_collected: { label: 'Material Collected', icon: '🧵' },
-  cutting:            { label: 'Cutting',             icon: '✂️' },
-  stitching_in_progress: { label: 'Stitching',        icon: '🪡' },
-  ready_to_collect:   { label: 'Ready',               icon: '👜' },
+  cutting: { label: 'Cutting', icon: '✂️' },
+  stitching_in_progress: { label: 'Stitching', icon: '🪡' },
+  ready_to_collect: { label: 'Ready', icon: '👜' },
 };
+
+const fmtShort = (dateStr) =>
+  new Date(dateStr).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' });
+
+const OrderCard = memo(({ item, onPress }) => (
+  <TouchableOpacity
+    style={styles.orderCard}
+    onPress={onPress}
+    activeOpacity={0.85}
+  >
+    {item.clothPhoto ? (
+      <Image source={{ uri: item.clothPhoto }} style={styles.orderImage} />
+    ) : (
+      <View style={styles.orderImagePlaceholder}>
+        <Text style={{ fontSize: 28 }}>👗</Text>
+      </View>
+    )}
+    <View style={styles.orderInfo}>
+      <Text style={styles.orderName} numberOfLines={1}>{item.customerName}</Text>
+      <Text style={styles.orderSerial}>Serial: {item.serialNumber}</Text>
+      <Text style={styles.orderPhone}>📱 {item.phoneNumber}</Text>
+      <Text style={styles.orderDate}>Due: {fmtShort(item.deliveryDueDate)}</Text>
+      {item.status && STATUS_MAP[item.status] && (
+        <View style={styles.statusBadge}>
+          <Text style={styles.statusBadgeText}>
+            {STATUS_MAP[item.status].icon} {STATUS_MAP[item.status].label}
+          </Text>
+        </View>
+      )}
+    </View>
+  </TouchableOpacity>
+));
 
 // ── Screen ─────────────────────────────────────────────────────────────────
 
 export default function CalendarDayScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
+  const insets = useSafeAreaInsets();
 
   const initialDate =
     params.date && /^\d{4}-\d{2}-\d{2}$/.test(params.date)
@@ -58,8 +92,9 @@ export default function CalendarDayScreen() {
       : todayKey();
 
   const [selectedDate, setSelectedDate] = useState(initialDate);
-  const [orders, setOrders] = useState([]);
+  const [ordersCache, setOrdersCache] = useState({});
   const [loading, setLoading] = useState(true);
+  const fetchedDates = useRef(new Set());
 
   // ── Swipe ────────────────────────────────────────────────────────────────
   const swipeX = useRef(0);
@@ -82,56 +117,38 @@ export default function CalendarDayScreen() {
   ).current;
 
   // ── Fetch orders for specific local date ───────────────────────────────
-  const fetchOrders = useCallback(async (dateKey) => {
-    setLoading(true);
-    try {
-      const res = await getOrdersByDate(dateKey);
-      setOrders(res.data.orders || []);
-    } catch (err) {
-      if (err.response?.status === 401) {
-        await AsyncStorage.removeItem('token');
-        router.replace('/');
-      }
-      setOrders([]);
-    } finally {
+  useEffect(() => {
+    // If we already fetched this date, just ensure loading is false and skip API call
+    if (fetchedDates.current.has(selectedDate)) {
       setLoading(false);
+      return;
     }
-  }, []);
 
-  useEffect(() => { fetchOrders(selectedDate); }, [selectedDate]);
+    fetchedDates.current.add(selectedDate);
+    let isMounted = true;
+
+    getOrdersByDate(selectedDate)
+      .then((res) => {
+        if (isMounted) {
+          setOrdersCache((prev) => ({ ...prev, [selectedDate]: res.data.orders || [] }));
+          setLoading(false);
+        }
+      })
+      .catch(async (err) => {
+        if (err.response?.status === 401) {
+          await AsyncStorage.removeItem('token');
+          router.replace('/');
+        }
+        if (isMounted) setLoading(false);
+      });
+
+    return () => { isMounted = false; };
+  }, [selectedDate, router]);
 
   // ── Renderers ────────────────────────────────────────────────────────────
-  const fmtShort = (dateStr) =>
-    new Date(dateStr).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' });
-
-  const renderCard = ({ item }) => (
-    <TouchableOpacity
-      style={styles.orderCard}
-      onPress={() => router.push(`/order/${item._id}`)}
-      activeOpacity={0.85}
-    >
-      {item.clothPhoto ? (
-        <Image source={{ uri: item.clothPhoto }} style={styles.orderImage} />
-      ) : (
-        <View style={styles.orderImagePlaceholder}>
-          <Text style={{ fontSize: 28 }}>👗</Text>
-        </View>
-      )}
-      <View style={styles.orderInfo}>
-        <Text style={styles.orderName} numberOfLines={1}>{item.customerName}</Text>
-        <Text style={styles.orderSerial}>Serial: {item.serialNumber}</Text>
-        <Text style={styles.orderPhone}>📱 {item.phoneNumber}</Text>
-        <Text style={styles.orderDate}>Due: {fmtShort(item.deliveryDueDate)}</Text>
-        {item.status && STATUS_MAP[item.status] && (
-          <View style={styles.statusBadge}>
-            <Text style={styles.statusBadgeText}>
-              {STATUS_MAP[item.status].icon} {STATUS_MAP[item.status].label}
-            </Text>
-          </View>
-        )}
-      </View>
-    </TouchableOpacity>
-  );
+  const renderCard = useCallback(({ item }) => (
+    <OrderCard item={item} onPress={() => router.push(`/order/${item._id}`)} />
+  ), [router]);
 
   const renderEmpty = () => {
     if (loading) return null;
@@ -160,7 +177,6 @@ export default function CalendarDayScreen() {
         </TouchableOpacity>
         <View style={styles.dateCenter}>
           <Text style={styles.dateMain}>{formatDayDisplay(selectedDate)}</Text>
-          {isToday && <Text style={styles.todayBadge}>TODAY</Text>}
         </View>
         <View style={{ width: 48 }} />
       </View>
@@ -170,11 +186,9 @@ export default function CalendarDayScreen() {
         <TouchableOpacity style={styles.navBtn} onPress={() => setSelectedDate((p) => stepDay(p, -1))} activeOpacity={0.8}>
           <Text style={styles.navBtnText}>‹ Prev</Text>
         </TouchableOpacity>
-        {!isToday && (
-          <TouchableOpacity style={styles.todayBtn} onPress={() => setSelectedDate(todayKey())} activeOpacity={0.8}>
-            <Text style={styles.todayBtnText}>Today</Text>
-          </TouchableOpacity>
-        )}
+        <TouchableOpacity style={styles.todayBtn} onPress={() => setSelectedDate(todayKey())} activeOpacity={0.8}>
+          <Text style={styles.todayBtnText}>Today</Text>
+        </TouchableOpacity>
         <TouchableOpacity style={styles.navBtn} onPress={() => setSelectedDate((p) => stepDay(p, 1))} activeOpacity={0.8}>
           <Text style={styles.navBtnText}>Next ›</Text>
         </TouchableOpacity>
@@ -188,7 +202,7 @@ export default function CalendarDayScreen() {
           </View>
         ) : (
           <FlatList
-            data={orders}
+            data={ordersCache[selectedDate] || []}
             renderItem={renderCard}
             keyExtractor={(item) => item._id}
             contentContainerStyle={styles.listContent}
@@ -199,7 +213,7 @@ export default function CalendarDayScreen() {
       </View>
 
       {/* Bottom Navbar */}
-      <View style={styles.navbar}>
+      <View style={[styles.navbar, { paddingBottom: Math.max(insets.bottom, 20), height: 65 + Math.max(insets.bottom, 20) }]}>
         <TouchableOpacity style={styles.navbarTab} onPress={() => router.replace('/home')} activeOpacity={0.75}>
           <Text style={styles.navbarIcon}>🏠</Text>
           <Text style={styles.navbarLabel}>Home</Text>
@@ -277,7 +291,7 @@ const styles = StyleSheet.create({
   emptyText: { fontFamily: 'Inter_400Regular', fontSize: 13, color: COLORS.textMuted, textAlign: 'center' },
   navbar: {
     flexDirection: 'row', backgroundColor: COLORS.white,
-    borderTopWidth: 1, borderTopColor: '#f0ebe6', height: 85, paddingBottom: 20, ...SHADOWS.card,
+    borderTopWidth: 1, borderTopColor: '#f0ebe6', ...SHADOWS.card,
   },
   navbarTab: {
     flex: 1, alignItems: 'center', justifyContent: 'center',
